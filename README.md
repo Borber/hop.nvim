@@ -70,7 +70,7 @@ require('plug').add({
 
 ```lua
 {
-    'smoka7/hop.nvim',
+    'wsdjeg/hop.nvim',
     version = "*",
     opts = {
         keys = 'etovxqpdygfblzhckisuran'
@@ -82,7 +82,7 @@ require('plug').add({
 
 ```lua
 use {
-  'smoka7/hop.nvim',
+  'wsdjeg/hop.nvim',
   tag = '*', -- optional but strongly recommended
   config = function()
     -- you can configure Hop the way you like here; see :h hop-config
