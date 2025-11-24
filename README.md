@@ -1,19 +1,12 @@
-                                              __
-                                             / /_  ____  ____
-                                            / __ \/ __ \/ __ \
-                                           / / / / /_/ / /_/ /
-                                          /_/ /_/\____/ .___/
-                                                     /_/
-                                      · Neovim motions on speed! ·
+# hop.nvim
 
-<p align="center">
-  <img src="https://img.shields.io/github/issues/wsdjeg/hop.nvim?color=cyan&style=for-the-badge"/>
-  <img src="https://img.shields.io/github/issues-pr/wsdjeg/hop.nvim?color=green&style=for-the-badge"/>
-  <img src="https://img.shields.io/github/contributors-anon/wsdjeg/hop.nvim?color=blue&style=for-the-badge"/>
-  <img src="https://img.shields.io/github/last-commit/wsdjeg/hop.nvim?style=for-the-badge"/>
-  <img src="https://img.shields.io/github/v/tag/wsdjeg/hop.nvim?color=pink&label=release&style=for-the-badge"/>
-  <img src="https://img.shields.io/luarocks/v/wsdjeg/hop.nvim?style=for-the-badge"/>
-</p>
+> Neovim motions on speed! 
+
+[![GitHub License](https://img.shields.io/github/license/wsdjeg/hop.nvim)](LICENSE)
+[![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/wsdjeg/hop.nvim)](https://github.com/wsdjeg/hop.nvim/issues)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/wsdjeg/hop.nvim)](https://github.com/wsdjeg/hop.nvim/commits/master/)
+[![GitHub Release](https://img.shields.io/github/v/release/wsdjeg/hop.nvim)](https://github.com/wsdjeg/hop.nvim/releases)
+[![luarocks](https://img.shields.io/luarocks/v/wsdjeg/hop.nvim)](https://luarocks.org/modules/wsdjeg/hop.nvim)
 
 **Hop** is an [EasyMotion](https://github.com/easymotion/vim-easymotion)-like plugin allowing you to jump anywhere in a
 document with as few keystrokes as possible. It does so by annotating text in
@@ -26,9 +19,24 @@ target in your document reachable in a few keystrokes.
   <img src="https://user-images.githubusercontent.com/506592/176885253-5f618593-77c5-4843-9101-a9de30f0a022.png"/>
 </p>
 
-This is a fork of [smoka7's hop.nvim repo](https://github.com/smoka7/hop.nvim)
+<!-- vim-markdown-toc GFM -->
 
-# Features
+- [Features](#features)
+- [Installation](#installation)
+    - [Using nvim-plug](#using-nvim-plug)
+    - [Using lazy.nvim](#using-lazynvim)
+    - [Using packer](#using-packer)
+    - [Using luarocks](#using-luarocks)
+    - [Supported Neovim versions](#supported-neovim-versions)
+    - [Important note about versioning](#important-note-about-versioning)
+- [Keybindings](#keybindings)
+- [Other tools like hop.nvim](#other-tools-like-hopnvim)
+- [Credits](#credits)
+- [License](#license)
+
+<!-- vim-markdown-toc -->
+
+## Features
 
 - Go to any word in the current buffer (`:HopWord`).
 - Go to any camelCase word in the current buffer (`:HopCamelCase`).
@@ -47,26 +55,20 @@ This is a fork of [smoka7's hop.nvim repo](https://github.com/smoka7/hop.nvim)
   change the dictionary keys to use for the labels, jump on sole occurrence, etc.
 - Extensible: provide your own jump targets and create Hop extensions!
 
-# Installation
+## Installation
 
-## Using nvim-plug
+### Using nvim-plug
 
 ```lua
 require('plug').add({
   'wsdjeg/hop.nvim',
-  keys = {
-    { 'n', '<leader>jl', '<cmd>HopLine<cr>', { silent = true, desc = 'hop jump line' } },
-    { 'n', '<leader>jj', '<cmd>HopChar1<cr>', { silent = true, desc = 'hop jump char' } },
-    { 'n', '<leader>j/', '<cmd>HopPattern<cr>', { silent = true, desc = 'hop jump pattern' } },
+  opts = {
+    keys = 'etovxqpdygfblzhckisuran',
   },
-  cmds = { 'HopPattern', 'HopLine', 'HopChar1' },
-  opts = { match_mappings = { 'zh', 'zh_sc' } },
-  dev = true,
-  desc = "eric's forked hop.nvim",
 })
 ```
 
-## Using lazy.nvim
+### Using lazy.nvim
 
 ```lua
 {
@@ -78,37 +80,37 @@ require('plug').add({
 }
 ```
 
-## Using packer
+### Using packer
 
 ```lua
-use {
+use({
   'wsdjeg/hop.nvim',
   tag = '*', -- optional but strongly recommended
   config = function()
     -- you can configure Hop the way you like here; see :h hop-config
-    require'hop'.setup { keys = 'etovxqpdygfblzhckisuran' }
-  end
-}
+    require('hop').setup({ keys = 'etovxqpdygfblzhckisuran' })
+  end,
+})
 ```
 
-## Using luarocks
+### Using luarocks
 
 ```
 luarocks install hop.nvim
 ```
 
-## Supported Neovim versions
+### Supported Neovim versions
 
 Hop supports **latest stable release** and nightly releases of Neovim. However, keep in mind that if you are on a nightly version, you must be **on
 the last one**. If you are not, then you are exposed to compatibility issues / breakage.
 
-## Important note about versioning
+### Important note about versioning
 
 This plugin implements [SemVer] via git tags. Versions are prefixed with a `v`. You are **advised** to use a major version
 dependency to be sure your config will not break when Hop gets updated.
 
 
-# Keybindings
+## Keybindings
 
 Hop doesn’t set any keybindings; you will have to define them by yourself.
 
@@ -133,7 +135,7 @@ end, {remap=true})
 ```
 
 
-# Other tools like hop.nvim
+## Other tools like hop.nvim
 
 * [sneak.nvim](https://github.com/justinmk/vim-sneak)
 * [EasyMotion](https://github.com/easymotion/vim-easymotion)
@@ -146,6 +148,10 @@ end, {remap=true})
 * [IdeaVim-Sneak](https://plugins.jetbrains.com/plugin/15348-ideavim-sneak)
 * [leap.nvim](https://github.com/ggandor/leap.nvim)
 * [flash.nvim](https://github.com/folke/flash.nvim)
+
+## Credits
+
+- [smoka7's hop.nvim repo](https://github.com/smoka7/hop.nvim)
 
 ## License
 
