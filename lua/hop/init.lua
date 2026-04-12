@@ -180,7 +180,9 @@ function M.get_input_pattern(prompt, maxchar, opts)
 
     api.nvim_echo({}, false, {})
     vim.cmd.redraw()
-    api.nvim_echo({ { prompt, 'Question' }, { pat } }, false, {})
+    if M.opts.display_prompt then
+      api.nvim_echo({ { prompt, 'Question' }, { pat } }, false, {})
+    end
 
     local ok, key = pcall(vim.fn.getcharstr)
     if not ok then -- Interrupted by <C-c>
