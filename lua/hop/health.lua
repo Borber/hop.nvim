@@ -1,5 +1,6 @@
 local M = {}
 local hop = require('hop')
+local perm = require('hop.perm')
 
 -- Initialization check.
 --
@@ -10,9 +11,7 @@ function M.check()
   health.start('Ensuring keys are unique')
   local existing_keys = {}
   local had_errors = false
-  for i = 0, #hop.opts.keys do
-    local key = hop.opts.keys:sub(i, i)
-
+  for _, key in ipairs(perm.split_keys(hop.opts.keys)) do
     if existing_keys[key] then
       health.error(string.format('key %s appears more than once in opts.keys', key))
       had_errors = true

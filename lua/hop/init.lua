@@ -1,6 +1,13 @@
 local api = vim.api
 local M = {}
 
+local BACKSPACE_KEYS = {
+  [api.nvim_replace_termcodes('<BS>', true, false, true)] = true,
+  [api.nvim_replace_termcodes('<C-H>', true, false, true)] = true,
+  ['\b'] = true,
+  ['\127'] = true,
+}
+
 -- Ensure options are sound.
 --
 -- Some options cannot be used together. For instance, multi_windows and current_line_only don’t really make sense used
@@ -52,6 +59,38 @@ local function clear_namespace(buf_list, hl_ns)
       api.nvim_buf_clear_namespace(buf, hl_ns, 0, -1)
     end
   end
+end
+
+---@param key string|nil
+---@return boolean
+local function is_backspace_key(key)
+  return key ~= nil and BACKSPACE_KEYS[key] == true
+end
+
+---@param key string|nil
+---@return boolean
+local function is_plain_key(key)
+  return key ~= nil and key:byte() ~= 128
+end
+
+---@param hint_state HintState
+---@param hints Hint[]
+---@param prefix string
+---@param prefix_length integer
+---@param opts Options
+local function set_active_hints(hint_state, hints, prefix, prefix_length, opts)
+  local hint = require('hop.hint')
+
+  hint_state.active_hints = hints
+  hint_state.prefix = prefix
+  hint_state.prefix_length = prefix_length
+
+  local display_opts = opts
+  if prefix_length > 0 then
+    display_opts = setmetatable({ prefix_length = prefix_length }, { __index = opts })
+  end
+
+  hint.set_hint_extmarks(hint_state.hl_ns, hints, display_opts)
 end
 
 -- Add the virtual cursor, taking care to handle the cases where:
@@ -168,7 +207,7 @@ function M.move_cursor_to(jt, opts)
     end
     -- If still only operator pending, make the motion inclusive
     if mode == 'no' then
-      vim.cmd[[noautocmd normal! v]]
+      vim.cmd([[noautocmd normal! v]])
     elseif mode == 'nov' then -- make exclusive, :help o_v
       local _, lineno, col, _ = unpack(vim.fn.getpos('.'))
       if jt.cursor.row < lineno or jt.cursor.row == lineno and jt.cursor.col < col then -- hopping backwards
@@ -188,7 +227,7 @@ function M.move_cursor_to(jt, opts)
           jump_target.move_jump_target(jt, 0, -1)
         end
       end
-      vim.cmd[[noautocmd normal! v]]
+      vim.cmd([[noautocmd normal! v]])
     end
   end
 
@@ -263,16 +302,14 @@ function M.hint_with_callback(jump_target_gtr, opts, callback)
 
   -- we have at least two targets, so generate hints to display
   hs.hints = hint.create_hints(generated.jump_targets, generated.indirect_jump_targets, opts)
-  hs.active_hints = hs.hints
-  hs.prefix = ''
-  hs.prefix_length = 0
   hs.hint_index = hint.create_hint_index(hs.hints)
 
   apply_dimming(hs, opts)
-  hint.set_hint_extmarks(hs.hl_ns, hs.active_hints, opts)
+  set_active_hints(hs, hs.hints, '', 0, opts)
   vim.cmd.redraw()
 
   local h = nil
+  local quit_key = api.nvim_replace_termcodes(opts.quit_key, true, false, true)
   while h == nil do
     local ok, key = pcall(vim.fn.getcharstr)
     if not ok then
@@ -280,29 +317,53 @@ function M.hint_with_callback(jump_target_gtr, opts, callback)
       break
     end
 
-    -- Special keys are string and start with 128 see :h getchar
-    local not_special_key = true
-    if key == nil then
-      not_special_key = false
-    elseif key:byte() == 128 then
-      not_special_key = false
-    end
-
     -- If this is a key used in Hop (via opts.keys), deal with it in Hop
     -- otherwise quit Hop
-    if not_special_key and key_set[key] then
+    if is_backspace_key(key) then
+      if M.backtrack_hints(hs, opts) then
+        vim.cmd.redraw()
+      else
+        M.quit(hs)
+        break
+      end
+    elseif is_plain_key(key) and key_set[key] then
       h = M.refine_hints(key, hs, callback, opts)
       vim.cmd.redraw()
     else
       M.quit(hs)
       -- If the captured key is not the quit_key, pass it through
       -- to nvim to be handled normally (including mappings)
-      if key ~= nil and key ~= api.nvim_replace_termcodes(opts.quit_key, true, false, true) then
+      if key ~= nil and key ~= quit_key then
         api.nvim_feedkeys(key, '', true)
       end
       break
     end
   end
+end
+
+-- Backtrack hints to the previous prefix.
+---@param hint_state HintState
+---@param opts Options
+---@return boolean
+function M.backtrack_hints(hint_state, opts)
+  local hint = require('hop.hint')
+
+  if hint_state.prefix_length <= 0 then
+    return false
+  end
+
+  local prefix_length = hint_state.prefix_length - 1
+  local prefix = vim.fn.strcharpart(hint_state.prefix, 0, prefix_length)
+  local hints
+  if prefix_length == 0 then
+    hints = hint_state.hints
+  else
+    hints = hint_state.hint_index[prefix] or {}
+  end
+
+  set_active_hints(hint_state, hints, prefix, prefix_length, opts)
+
+  return true
 end
 
 -- Refine hints in the given buffer.
@@ -327,12 +388,7 @@ function M.refine_hints(key, hint_state, callback, opts)
     end
 
     hint.delete_hint_extmarks_not_in(hint_state.hl_ns, hint_state.active_hints, hints)
-    hint_state.active_hints = hints
-    hint_state.prefix = prefix
-    hint_state.prefix_length = prefix_length
-
-    local display_opts = setmetatable({ prefix_length = prefix_length }, { __index = opts })
-    hint.set_hint_extmarks(hint_state.hl_ns, hints, display_opts)
+    set_active_hints(hint_state, hints, prefix, prefix_length, opts)
   else
     M.quit(hint_state)
 
