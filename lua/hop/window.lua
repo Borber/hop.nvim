@@ -28,6 +28,8 @@
 ---@field row WindowRow
 ---@field line string
 ---@field col_bias WindowCol Bias column of the left clipped line
+---@field line_end WindowCol|nil End column of the clipped line in the original buffer line
+---@field original_line string|nil The unclipped line, used by buffer-aware scanners
 
 ---@class WindowContext
 ---@field win_handle integer
@@ -197,6 +199,7 @@ function M.get_lines_context(win_ctx)
     }
     if fold_end == -1 then
       line_ctx.line = api.nvim_buf_get_lines(win_ctx.buf_handle, lnr - 1, lnr, false)[1]
+      line_ctx.original_line = line_ctx.line
     else
       -- Skip folded lines
       -- Let line = '' to take the first folded line as an empty line, where only the first column can move to
@@ -289,6 +292,7 @@ function M.clip_line_context(win_ctx, line_ctx, opts)
 
   line_ctx.line = shifted_line
   line_ctx.col_bias = col_bias
+  line_ctx.line_end = col_bias + #shifted_line
 end
 
 return M

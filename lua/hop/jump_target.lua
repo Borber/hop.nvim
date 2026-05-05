@@ -1,5 +1,5 @@
 -- Generate jump locations within windows according to hop options
----@alias Generator fun(opts:Options):Locations
+---@alias Generator fun(opts:Options, win_ctxs:WindowContext[]|nil):Locations
 
 -- Jump targets are locations in buffers where users might jump to. They are wrapped in a table and provide the
 -- required information so that Hop can associate label and display the hints.
@@ -26,11 +26,101 @@
 ---@field line_ctx LineContext
 ---@field regex Regex
 
+---@class Regex
+---@field oneshot boolean
+---@field match fun(s:string, jctx:JumpContext, opts:Options):ColumnRange
+---@field match_line? fun(bufnr:integer, row:WindowRow, start_col:WindowCol, end_col:WindowCol|nil, jctx:JumpContext, opts:Options):ColumnRange
+
 local hint = require('hop.hint')
 local window = require('hop.window')
+local api = vim.api
 
 ---@class JumpTargetModule
 local M = {}
+
+---@param pat string
+---@return Regex
+local function regex_by_searching(pat)
+  local regex = vim.regex(pat)
+
+  return {
+    oneshot = false,
+    match = function(s)
+      return regex:match_str(s)
+    end,
+    match_line = function(bufnr, row, start_col, end_col)
+      return regex:match_line(bufnr, row - 1, start_col, end_col)
+    end,
+  }
+end
+
+---@return Regex
+local function regex_by_word_start()
+  return regex_by_searching('\\k\\+')
+end
+
+---@return Regex
+local function regex_by_camel_case()
+  local camel = '\\u\\l\\+'
+  local acronyms = '\\u\\+\\ze\\u\\l'
+  local upper = '\\u\\+'
+  local lower = '\\l\\+'
+  local rgb = '#\\x\\+\\>'
+  local ox = '\\<0[xX]\\x\\+\\>'
+  local oo = '\\<0[oO][0-7]\\+\\>'
+  local ob = '\\<0[bB][01]\\+\\>'
+  local num = '\\d\\+'
+  local parts = { camel, acronyms, upper, lower, rgb, ox, oo, ob, num, '\\~', '!', '@', '#', '$' }
+
+  return regex_by_searching('\\%(\\%(' .. table.concat(parts, '\\)\\|\\%(') .. '\\)\\)')
+end
+
+---@return Regex
+local function regex_by_vertical()
+  return {
+    oneshot = true,
+    match = function(s, jctx, opts)
+      if window.is_cursor_line(jctx.win_ctx, jctx.line_ctx) then
+        if window.is_active_window(jctx.win_ctx) then
+          return
+        end
+
+        if opts.direction == hint.HintDirection.AFTER_CURSOR then
+          return 0, 1
+        end
+      end
+
+      local idx = window.cell2char(s, jctx.win_ctx.col_first)
+      local col = vim.fn.byteidx(s, idx)
+      if -1 < col and col < #s then
+        return col, col + 1
+      end
+
+      return #s - 1, #s
+    end,
+  }
+end
+
+---@return Regex
+local function regex_by_anywhere()
+  return regex_by_searching('\\v(<.|^$)|(.>|^$)|(\\l)\\zs(\\u)|(_\\zs.)|(#\\zs.)')
+end
+
+---@param jump_ctx JumpContext
+---@param jump_target JumpTarget
+---@param locations Locations
+---@param opts Options
+---@param win_bias integer
+local function push_scored_jump_target(jump_ctx, jump_target, locations, opts, win_bias)
+  local score = opts.distance_method(jump_ctx.win_ctx.cursor, jump_target.cursor, opts.x_bias) + win_bias
+  if score ~= 0 then
+    locations.jump_targets[#locations.jump_targets + 1] = jump_target
+    locations.indirect_jump_targets[#locations.indirect_jump_targets + 1] = {
+      index = #locations.jump_targets,
+      score = score,
+    }
+  end
+end
 
 -- Create jump targets within line
 ---@param jump_ctx JumpContext
@@ -92,25 +182,82 @@ local function create_line_jump_targets(jump_ctx, opts)
   return jump_targets
 end
 
+---@param jump_ctx JumpContext
+---@param opts Options
+---@return JumpTarget[]|nil
+local function create_buffer_line_jump_targets(jump_ctx, opts)
+  if jump_ctx.regex.match_line == nil then
+    return nil
+  end
+
+  local wctx = jump_ctx.win_ctx
+  local lctx = jump_ctx.line_ctx
+
+  if lctx.original_line == nil then
+    return nil
+  end
+
+  if lctx.original_line == '' and wctx.col_offset > 0 then
+    return {}
+  end
+
+  ---@type JumpTarget[]
+  local jump_targets = {}
+  local line_end = lctx.line_end or #lctx.original_line
+  local start_col = lctx.col_bias
+
+  while start_col <= line_end do
+    ---@type ColumnRange
+    local b, e = jump_ctx.regex.match_line(wctx.buf_handle, lctx.row, start_col, line_end, jump_ctx, opts)
+    if b == nil then
+      break
+    end
+
+    local matched_length = e - b
+    if b == e then
+      e = e + 1
+    end
+
+    ---@type WindowCol
+    local col = start_col + b
+    if opts.hint_position == hint.HintPosition.MIDDLE then
+      col = start_col + math.floor((b + e) / 2)
+    elseif opts.hint_position == hint.HintPosition.END then
+      col = start_col + e - 1
+    end
+
+    jump_targets[#jump_targets + 1] = {
+      window = wctx.win_handle,
+      buffer = wctx.buf_handle,
+      cursor = {
+        row = lctx.row,
+        col = math.max(0, col),
+      },
+      length = math.max(0, matched_length),
+    }
+
+    start_col = start_col + e
+
+    if start_col > line_end or jump_ctx.regex.oneshot then
+      break
+    end
+  end
+
+  return jump_targets
+end
+
 -- Create indirect jump targets within line
 ---@param jump_ctx JumpContext
 ---@param locations Locations used later to sort jump targets by score and create hints.
 ---@param opts Options
 local function create_line_indirect_jump_targets(jump_ctx, locations, opts)
   -- First, create the jump targets for the ith line
-  local line_jump_targets = create_line_jump_targets(jump_ctx, opts)
+  local line_jump_targets = create_buffer_line_jump_targets(jump_ctx, opts) or create_line_jump_targets(jump_ctx, opts)
+  local win_bias = math.abs(vim.api.nvim_get_current_win() - jump_ctx.win_ctx.win_handle) * 1000
 
   -- then, append those to the input jump target list and create the indexed jump targets
-  local win_bias = math.abs(vim.api.nvim_get_current_win() - jump_ctx.win_ctx.win_handle) * 1000
   for _, jump_target in pairs(line_jump_targets) do
-    local score = opts.distance_method(jump_ctx.win_ctx.cursor, jump_target.cursor, opts.x_bias) + win_bias
-    if score ~= 0 then
-      locations.jump_targets[#locations.jump_targets + 1] = jump_target
-      locations.indirect_jump_targets[#locations.indirect_jump_targets + 1] = {
-        index = #locations.jump_targets,
-        score = score,
-      }
-    end
+    push_scored_jump_target(jump_ctx, jump_target, locations, opts, win_bias)
   end
 end
 
@@ -186,8 +333,8 @@ end
 ---@return Generator
 function M.jump_target_generator(regex, win_ctxs)
   ---@type Generator
-  return function(opts)
-    local all_win_ctxs = win_ctxs or window.get_windows_context(opts)
+  return function(opts, runtime_win_ctxs)
+    local all_win_ctxs = runtime_win_ctxs or win_ctxs or window.get_windows_context(opts)
     if opts.current_line_only then
       all_win_ctxs = { all_win_ctxs[1] }
     end
@@ -209,6 +356,118 @@ function M.jump_target_generator(regex, win_ctxs)
         ---@type JumpContext
         local jump_ctx = { win_ctx = wctx, line_ctx = lctx, regex = regex }
         create_line_indirect_jump_targets(jump_ctx, locations, opts)
+      end
+    end
+
+    M.sort_indirect_jump_targets(locations.indirect_jump_targets, opts)
+
+    return locations
+  end
+end
+
+---@return Generator
+function M.word_start_generator()
+  return M.jump_target_generator(regex_by_word_start())
+end
+
+---@return Generator
+function M.camel_case_generator()
+  return M.jump_target_generator(regex_by_camel_case())
+end
+
+---@return Generator
+function M.vertical_generator()
+  return M.jump_target_generator(regex_by_vertical())
+end
+
+---@return Generator
+function M.anywhere_generator()
+  return M.jump_target_generator(regex_by_anywhere())
+end
+
+---@param skip_whitespace boolean
+---@return Generator
+function M.line_start_generator(skip_whitespace)
+  ---@type Generator
+  return function(opts, runtime_win_ctxs)
+    local all_win_ctxs = runtime_win_ctxs or window.get_windows_context(opts)
+    if opts.current_line_only then
+      all_win_ctxs = { all_win_ctxs[1] }
+    end
+
+    ---@type Locations
+    local locations = {
+      jump_targets = {},
+      indirect_jump_targets = {},
+    }
+
+    for _, wctx in ipairs(all_win_ctxs) do
+      window.clip_window_context(wctx, opts)
+      local win_bias = math.abs(vim.api.nvim_get_current_win() - wctx.win_handle) * 1000
+
+      local lnr = wctx.line_range[1]
+      while lnr <= wctx.line_range[2] do
+        local target_row = lnr
+        local fold_end = api.nvim_win_call(wctx.win_handle, function()
+          return vim.fn.foldclosedend(lnr)
+        end)
+
+        local line = nil
+        local target_col = nil
+        if fold_end == -1 then
+          if not window.is_active_line(wctx, { row = lnr }) then
+            line = api.nvim_buf_get_lines(wctx.buf_handle, lnr - 1, lnr, false)[1]
+            if line ~= '' or wctx.col_offset == 0 then
+              target_col = 0
+
+              if skip_whitespace then
+                local end_cell = vim.fn.strdisplaywidth(line)
+                if wctx.win_width ~= nil then
+                  end_cell = wctx.col_offset + wctx.win_width
+                end
+
+                local left_idx = window.cell2char(line, wctx.col_offset)
+                local right_idx = window.cell2char(line, end_cell)
+                local visible_line = vim.fn.strcharpart(line, left_idx, right_idx - left_idx)
+                local b = visible_line:find('%S')
+                if b ~= nil then
+                  target_col = vim.fn.byteidx(line, left_idx + vim.fn.charidx(visible_line, b - 1))
+                else
+                  target_col = nil
+                end
+              elseif wctx.col_offset > 0 then
+                target_col = vim.fn.byteidx(line, window.cell2char(line, wctx.col_offset))
+                if target_col < 0 then
+                  target_col = #line
+                end
+              end
+            end
+          end
+        else
+          if not window.is_active_line(wctx, { row = lnr }) and wctx.col_offset == 0 and not skip_whitespace then
+            target_col = 0
+          end
+          lnr = fold_end
+        end
+
+        if target_col ~= nil then
+          ---@type JumpContext
+          local jump_ctx = {
+            win_ctx = wctx,
+            line_ctx = { row = target_row, line = line or '', col_bias = 0 },
+          }
+          push_scored_jump_target(jump_ctx, {
+            window = wctx.win_handle,
+            buffer = wctx.buf_handle,
+            cursor = {
+              row = target_row,
+              col = target_col,
+            },
+            length = 1,
+          }, locations, opts, win_bias)
+        end
+
+        lnr = lnr + 1
       end
     end
 

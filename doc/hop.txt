@@ -183,7 +183,6 @@ unstable.
 `hop.hint`        Various functions to create, update and reduce hints.
 `hop.highlight`   Highlight functions (creation / autocommands / etc.).
 `hop.jump_target` Core module used to create jump targets.
-`hop.jump_regex`  Create regex for jump target generator.
 `hop.window`      Handle windows context.
 `hop.perm`        Permutation functions. Permutations are used as labels for
                 the hints.
@@ -487,42 +486,6 @@ manipulate the results of jump targets.
         {offset_row}  Row offset.
         {offset_cell} Cell offset.
 
-                                                            *hop-jump-regex-api*
-Jump regex API~
-
-The jump regex API offers various helper functions to create static regexes
-required by |hop.jump_target.jump_target_generator|.
-
-If you want to create your own regex-like table, you need to provide a table
-with two fields: `oneshot`, a boolean value, that is to be set to `true` if the
-regex should be applied only once to each line, and `match`, which is the actual
-matcher that returns the beginning / end (inclusive / exclusive) byte indices
-of the match. You are advised to use |vim.regex|.
-
-`hop.jump_regex.regex_by_word_start()`        *hop.jump_regex.regex_by_word_start*
-    Create regex for matching |word|. This pattern matches the beginnings of
-    all the words in the windows.
-
-`hop.jump_regex.regex_by_camel_case()`        *hop.jump_regex.regex_by_camel_case*
-    Create regex for matching camel cases of words. This pattern matches the
-    beginnings of all the words and the camel cases of the words in the windows.
-
-`hop.jump_regex.by_line_start()`                    *hop.jump_regex.by_line_start*
-    Create regex for matching start of a line. This pattern matches the column
-    1 of each line in the windows.
-
-`hop.jump_regex.by_vertical()`                        *hop.jump_regex.by_vertical*
-    Create regex for matching vertical positions of the current cursor column.
-    This pattern matches the character positioned at the same column number as
-    the cursor across each line in the windows.
-
-`hop.jump_regex.regex_by_line_start_skip_whitespace()` *hop.jump_regex.regex_by_line_start_skip_whitespace*
-    Create regex for matching non-whitespace start of a line. This pattern
-    matches the first non-whitespace character of each line in the windows.
-
-`hop.jump_regex.regex_by_anywhere()`            *hop.jump_regex.regex_by_anywhere*
-    Create regex for matching anywhere in the windows.
-
 Window API~
 
 The window API handles the windows and their context.
@@ -588,23 +551,21 @@ The highlight API gives two functions to manipulate the highlights Hop uses:
 
 Permutation API~
 
-The permutation API is the core part of the algorithm used in Hop.
-Permutations in Hop are made out of a source sequence of characters, called
-a key set and represented with {keys}. A good choice of key set is important
-to yield short and concise permutations, allowing to jump to targets with
-fewer keystrokes.
+The permutation API provides helpers to generate hint labels from a source
+sequence of characters, called a key set and represented with {keys}. A good
+choice of key set is important to yield short and concise labels, allowing to
+jump to targets with fewer keystrokes.
 
-`hop.perm.permutations(`{keys}`,` {n}`,` {opts}`)`               *hop.perm.permutations*
-    Get the first {n} permutations out of {keys}.
+`hop.perm.prefix_labels(`{keys}`,` {n}`)`                  *hop.perm.prefix_labels*
+    Get {n} compact, prefix-free labels out of {keys}. Those labels are used
+    by Hop to keep nearby targets short while allowing fast prefix lookups.
 
     Arguments:~
-        {keys}  Input key set to use to create permutations.
-        {n}     Number of permutations to generate.
-        {opts}  Hop options.
+        {keys}  Input key set to use to create labels.
+        {n}     Number of labels to generate.
 
     Return:~
-        The {n} first permutations for the given {keys} and
-        |hop-config-perm_method| set in {opts}.
+        The {n} first prefix-free labels for the given {keys}.
 
 ==============================================================================
 CONFIGURATION                                                       *hop-config*
@@ -657,33 +618,6 @@ below.
 
     Defaults:~
         `quit_key = '<Esc>'`
-
-`perm_method`                                             *hop-config-perm_method*
-    Permutation method to use.
-
-    Permutation methods allow to change the way permutations (i.e. hints
-    sequence labels) are generated internally. There is currently only
-    one possible option:
-
-        `TrieBacktrackFilling`
-            Permutation algorithm based on tries and backtrack filling.
-
-            This algorithm uses the full potential of |hop-config-keys| by
-            using them all to saturate a trie, representing all the
-            permutations. Once a layer is saturated, this algorithm will
-            backtrack (from the end of the trie, deepest first) and create a
-            new layer in the trie, ensuring that the first permutations will
-            be shorter than the last ones.
-
-            Because of the last, deepest trie insertion mechanism and trie
-            saturation, this algorithm yields a much better distribution
-            accross your buffer, and you should get 1-sequences and
-            2-sequences most of the time. Each dimension grows
-            exponentially, so you get `keys_length²` 2-sequence keys,
-            `keys_length³` 3-sequence keys, etc in the worst cases.
-
-    Default value~
-        `perm_method = require'hop.perm'.TrieBacktrackFilling`
 
 `reverse_distribution`                           *hop-config-reverse_distribution*
     The default behavior for key sequence distribution in your buffer is to

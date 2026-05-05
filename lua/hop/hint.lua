@@ -5,11 +5,16 @@ local api = vim.api
 ---@class Hint
 ---@field label string|nil
 ---@field jump_target JumpTarget
+---@field extmark_id integer|nil
 
 ---@class HintState
 ---@field buf_list integer[]
 ---@field all_ctxs WindowContext[]
 ---@field hints Hint[]
+---@field hint_index table<string,Hint[]>
+---@field active_hints Hint[]
+---@field prefix string
+---@field prefix_length integer
 ---@field hl_ns integer
 ---@field dim_ns integer
 ---@field preview_ns integer
@@ -68,44 +73,50 @@ function M.readwise_distance(a, b, x_bias)
   return (100 * math.abs(b.row - a.row)) + (b.col - a.col)
 end
 
--- Reduce a hint.
--- This function will remove hints not starting with the input key and will reduce the other ones
--- with one level.
 ---@param label string
----@param key string
----@return string|nil
-local function reduce_label(label, key)
-  local snd_idx = vim.fn.byteidx(label, 1)
-  if label:sub(1, snd_idx) == key then
-    label = label:sub(snd_idx + 1)
+---@param length integer
+---@return string
+local function label_prefix(label, length)
+  if length == 0 then
+    return ''
   end
 
-  if label == '' then
-    return nil
-  end
-
-  return label
+  local end_idx = vim.fn.byteidx(label, length)
+  return label:sub(1, end_idx)
 end
 
--- Reduce all hints and return the one fully reduced, if any.
+---@param label string
+---@param length integer
+---@return string
+local function label_suffix(label, length)
+  if length == 0 then
+    return label
+  end
+
+  local start_idx = vim.fn.byteidx(label, length)
+  return label:sub(start_idx + 1)
+end
+
 ---@param hints Hint[]
----@param key string
----@return Hint|nil,Hint[]
-function M.reduce_hints(hints, key)
-  local next_hints = {}
+---@return table<string,Hint[]>
+function M.create_hint_index(hints)
+  local hint_index = {}
 
-  for _, h in pairs(hints) do
-    local prev_label = h.label
-    h.label = reduce_label(h.label, key)
-
-    if h.label == nil then
-      return h, {}
-    elseif h.label ~= prev_label then
-      next_hints[#next_hints + 1] = h
+  for _, h in ipairs(hints) do
+    if h.label ~= nil then
+      for depth = 1, vim.fn.strchars(h.label) do
+        local prefix = label_prefix(h.label, depth)
+        local bucket = hint_index[prefix]
+        if bucket == nil then
+          bucket = {}
+          hint_index[prefix] = bucket
+        end
+        bucket[#bucket + 1] = h
+      end
     end
   end
 
-  return nil, next_hints
+  return hint_index
 end
 
 -- Create hints from jump targets.
@@ -122,7 +133,7 @@ end
 function M.create_hints(jump_targets, indirect_jump_targets, opts)
   ---@type Hint[]
   local hints = {}
-  local perms = perm.permutations(opts.keys, #jump_targets, opts)
+  local labels = perm.prefix_labels(opts.keys, #jump_targets)
 
   -- get or generate indirect_jump_targets
   if indirect_jump_targets == nil then
@@ -133,9 +144,10 @@ function M.create_hints(jump_targets, indirect_jump_targets, opts)
     end
   end
 
-  for i, indirect in pairs(indirect_jump_targets) do
+  for i, indirect in ipairs(indirect_jump_targets) do
+    local label = labels[i]
     hints[indirect.index] = {
-      label = table.concat(perms[i]),
+      label = label,
       jump_target = jump_targets[indirect.index],
     }
   end
@@ -185,8 +197,9 @@ end
 ---@param hints Hint[]
 ---@param opts Options
 function M.set_hint_extmarks(hl_ns, hints, opts)
-  for _, hint in pairs(hints) do
-    local label = hint.label
+  local prefix_length = opts.prefix_length or 0
+  for _, hint in ipairs(hints) do
+    local label = label_suffix(hint.label, prefix_length)
     if opts.uppercase_labels and label ~= nil then
       label = label:upper()
     end
@@ -199,12 +212,46 @@ function M.set_hint_extmarks(hl_ns, hints, opts)
     end
 
     local row, col = window.pos2extmark(hint.jump_target.cursor)
-    api.nvim_buf_set_extmark(hint.jump_target.buffer, hl_ns, row, col, {
+    hint.extmark_id = api.nvim_buf_set_extmark(hint.jump_target.buffer, hl_ns, row, col, {
+      id = hint.extmark_id,
       virt_text = virt_text,
       virt_text_pos = opts.hint_type,
       hl_mode = opts.hl_mode,
       priority = M.HintPriority.HINT,
     })
+  end
+end
+
+---@param hl_ns integer
+---@param hints Hint[]
+function M.delete_hint_extmarks(hl_ns, hints)
+  for _, hint in ipairs(hints) do
+    M.delete_hint_extmark(hl_ns, hint)
+  end
+end
+
+---@param hl_ns integer
+---@param hint Hint
+function M.delete_hint_extmark(hl_ns, hint)
+  if hint.extmark_id ~= nil and api.nvim_buf_is_valid(hint.jump_target.buffer) then
+    api.nvim_buf_del_extmark(hint.jump_target.buffer, hl_ns, hint.extmark_id)
+    hint.extmark_id = nil
+  end
+end
+
+---@param hl_ns integer
+---@param active_hints Hint[]
+---@param keep_hints Hint[]
+function M.delete_hint_extmarks_not_in(hl_ns, active_hints, keep_hints)
+  local keep = {}
+  for _, hint in ipairs(keep_hints) do
+    keep[hint] = true
+  end
+
+  for _, hint in ipairs(active_hints) do
+    if not keep[hint] then
+      M.delete_hint_extmark(hl_ns, hint)
+    end
   end
 end
 

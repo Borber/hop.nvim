@@ -221,6 +221,7 @@ end
 ---@param callback function
 function M.hint_with_callback(jump_target_gtr, opts, callback)
   local hint = require('hop.hint')
+  local perm = require('hop.perm')
 
   if not M.initialized then
     vim.notify('Hop is not initialized; please call the setup function', vim.log.levels.ERROR)
@@ -229,6 +230,10 @@ function M.hint_with_callback(jump_target_gtr, opts, callback)
 
   -- create hint state
   local hs = hint.create_hint_state(opts)
+  local key_set = {}
+  for _, key in ipairs(perm.split_keys(opts.keys)) do
+    key_set[key] = true
+  end
 
   -- create jump targets
   local generated = jump_target_gtr(opts, hs.all_ctxs)
@@ -258,9 +263,13 @@ function M.hint_with_callback(jump_target_gtr, opts, callback)
 
   -- we have at least two targets, so generate hints to display
   hs.hints = hint.create_hints(generated.jump_targets, generated.indirect_jump_targets, opts)
+  hs.active_hints = hs.hints
+  hs.prefix = ''
+  hs.prefix_length = 0
+  hs.hint_index = hint.create_hint_index(hs.hints)
 
   apply_dimming(hs, opts)
-  hint.set_hint_extmarks(hs.hl_ns, hs.hints, opts)
+  hint.set_hint_extmarks(hs.hl_ns, hs.active_hints, opts)
   vim.cmd.redraw()
 
   local h = nil
@@ -273,20 +282,22 @@ function M.hint_with_callback(jump_target_gtr, opts, callback)
 
     -- Special keys are string and start with 128 see :h getchar
     local not_special_key = true
-    if key and key:byte() == 128 then
+    if key == nil then
+      not_special_key = false
+    elseif key:byte() == 128 then
       not_special_key = false
     end
 
     -- If this is a key used in Hop (via opts.keys), deal with it in Hop
     -- otherwise quit Hop
-    if not_special_key and opts.keys:find(key, 1, true) then
+    if not_special_key and key_set[key] then
       h = M.refine_hints(key, hs, callback, opts)
       vim.cmd.redraw()
     else
       M.quit(hs)
       -- If the captured key is not the quit_key, pass it through
       -- to nvim to be handled normally (including mappings)
-      if key ~= api.nvim_replace_termcodes(opts.quit_key, true, false, true) then
+      if key ~= nil and key ~= api.nvim_replace_termcodes(opts.quit_key, true, false, true) then
         api.nvim_feedkeys(key, '', true)
       end
       break
@@ -301,7 +312,13 @@ end
 function M.refine_hints(key, hint_state, callback, opts)
   local hint = require('hop.hint')
 
-  local h, hints = hint.reduce_hints(hint_state.hints, key)
+  local prefix = hint_state.prefix .. key
+  local prefix_length = hint_state.prefix_length + 1
+  local hints = hint_state.hint_index[prefix] or {}
+  local h = nil
+  if #hints == 1 then
+    h = hints[1]
+  end
 
   if h == nil then
     if #hints == 0 then
@@ -309,10 +326,13 @@ function M.refine_hints(key, hint_state, callback, opts)
       return
     end
 
-    hint_state.hints = hints
+    hint.delete_hint_extmarks_not_in(hint_state.hl_ns, hint_state.active_hints, hints)
+    hint_state.active_hints = hints
+    hint_state.prefix = prefix
+    hint_state.prefix_length = prefix_length
 
-    clear_namespace(hint_state.buf_list, hint_state.hl_ns)
-    hint.set_hint_extmarks(hint_state.hl_ns, hints, opts)
+    local display_opts = setmetatable({ prefix_length = prefix_length }, { __index = opts })
+    hint.set_hint_extmarks(hint_state.hl_ns, hints, display_opts)
   else
     M.quit(hint_state)
 
@@ -341,56 +361,56 @@ end
 
 ---@param opts Options
 function M.hint_words(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
-  M.hint_with_regex(jump_regex.regex_by_word_start(), opts)
+  M.hint_with(jump_target.word_start_generator(), opts)
 end
 
 ---@param opts Options
 function M.hint_camel_case(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
-  M.hint_with_regex(jump_regex.regex_by_camel_case(), opts)
+  M.hint_with(jump_target.camel_case_generator(), opts)
 end
 
 ---@param opts Options
 function M.hint_lines(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
   opts.visual_mode = opts.visual_mode or 'V'
 
-  M.hint_with_regex(jump_regex.by_line_start(), opts)
+  M.hint_with(jump_target.line_start_generator(false), opts)
 end
 
 ---@param opts Options
 function M.hint_vertical(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
   opts.visual_mode = opts.visual_mode or 'V'
 
-  M.hint_with_regex(jump_regex.regex_by_vertical(), opts)
+  M.hint_with(jump_target.vertical_generator(), opts)
 end
 
 ---@param opts Options
 function M.hint_lines_skip_whitespace(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
   opts.visual_mode = opts.visual_mode or 'V'
 
-  M.hint_with_regex(jump_regex.regex_by_line_start_skip_whitespace(), opts)
+  M.hint_with(jump_target.line_start_generator(true), opts)
 end
 
 ---@param opts Options
 function M.hint_anywhere(opts)
-  local jump_regex = require('hop.jump_regex')
+  local jump_target = require('hop.jump_target')
 
   opts = override_opts(opts)
-  M.hint_with_regex(jump_regex.regex_by_anywhere(), opts)
+  M.hint_with(jump_target.anywhere_generator(), opts)
 end
 
 -- Setup user settings.
