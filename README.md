@@ -22,6 +22,7 @@ target in your document reachable in a few keystrokes.
 <!-- vim-markdown-toc GFM -->
 
 - [Features](#features)
+- [Performance](#performance)
 - [Installation](#installation)
     - [Using nvim-plug](#using-nvim-plug)
     - [Using lazy.nvim](#using-lazynvim)
@@ -49,6 +50,32 @@ target in your document reachable in a few keystrokes.
   to hint only before or after the cursor (`:Hop*BC`, `:Hop*AC`), for the current line (`:Hop*CurrentLine`),
   change the dictionary keys to use for the labels, jump on sole occurrence, etc.
 - Extensible: provide your own jump targets and create Hop extensions!
+
+## Performance
+
+Hop uses a compact jump pipeline designed to keep interactive latency low even with many visible targets:
+
+- `HopLine` and `HopLineStart` use direct line target generators instead of going through regex matching.
+- `HopWord`, `HopCamelCase`, and `HopAnywhere` scan buffer ranges directly, avoiding repeated Lua substring allocation while looking for matches.
+- Hint labels are generated as compact prefix-free sequences, so nearby targets stay short without relying on a trie backtracking permutation pass.
+- Key refinement uses a prefix index over the generated labels, narrowing candidates by prefix instead of scanning every hint after each key press.
+- Extmarks are updated incrementally during refinement, so unmatched branches are removed without rebuilding every visible hint.
+
+The main theoretical difference is that Hop now pays for the visible text and the active hint branch, not for repeatedly
+rebuilding intermediate strings and hint sets. In the table below, `L` is the number of visible lines, `C` is the number
+of visible characters, `T` is the number of generated targets, and `K` is the number of keys typed for a jump.
+
+| Area | Previous shape | Current shape | Expected effect |
+| --- | --- | --- | --- |
+| `HopLine` / `HopLineStart` target generation | Generic regex-style target generation over line contexts. | Direct per-line target generation. | Lower constant cost; line jumps scale with `L` instead of paying regex machinery per line. |
+| Word-like target generation | Repeatedly sliced Lua line suffixes before matching. Dense matches could allocate up to `O(C * T)` bytes, worst-case `O(C^2)` on a line. | Buffer-range matching against the original line range. | Near `O(C + T)` scanning behavior with far less allocation and GC pressure. |
+| Hint label generation | Trie/backtracking permutation pass. | One compact prefix-free label pass. | Simpler `O(T)` label creation with shorter nearby labels and no permutation fallback path. |
+| Key refinement | Filtered the active hints after each key press. | Prefix-index lookup for the typed label prefix. | From roughly `O(K * T)` refinement work to `O(K + active_branch)` lookup/update work. |
+| Extmark updates | Rebuilt or rescanned larger hint sets during refinement. | Deletes unmatched extmarks and refreshes the surviving branch. | Less redraw work after every key press, especially when the first key removes most targets. |
+
+Conclusion: the optimized implementation keeps the same user-facing purpose but removes the expensive general-purpose
+paths from the hot loop. The largest theoretical win is in dense buffers, where word-like jumps avoid quadratic substring
+allocation, and in large hint sets, where refinement no longer scans every hint after each key.
 
 ## Installation
 
