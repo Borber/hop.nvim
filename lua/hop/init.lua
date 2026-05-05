@@ -1,12 +1,6 @@
 local api = vim.api
 local M = {}
 
-local K_Esc = api.nvim_replace_termcodes('<Esc>', true, false, true)
-local K_BS = api.nvim_replace_termcodes('<BS>', true, false, true)
-local K_C_H = api.nvim_replace_termcodes('<C-H>', true, false, true)
-local K_CR = api.nvim_replace_termcodes('<CR>', true, false, true)
-local K_NL = api.nvim_replace_termcodes('<NL>', true, false, true)
-
 -- Ensure options are sound.
 --
 -- Some options cannot be used together. For instance, multi_windows and current_line_only don’t really make sense used
@@ -140,84 +134,6 @@ local function apply_dimming(hint_state, opts)
   if opts.virtual_cursor then
     add_virt_cur(hint_state.hl_ns)
   end
-end
-
--- Get pattern from input for hint and preview
----@param prompt string
----@param maxchar number|nil
----@param opts Options|nil
----@return string|nil
-function M.get_input_pattern(prompt, maxchar, opts)
-  local hint = require('hop.hint')
-  local jump_target = require('hop.jump_target')
-  local jump_regex = require('hop.jump_regex')
-
-  local hs = {}
-  if opts then
-    hs = hint.create_hint_state(opts)
-    hs.preview_ns = api.nvim_create_namespace('hop_preview')
-    apply_dimming(hs, opts)
-  end
-
-  local pat_keys = {}
-  ---@type string|nil
-  local pat = ''
-
-  while true do
-    pat = vim.fn.join(pat_keys, '')
-
-    if opts and #pat > 0 then
-      clear_namespace(hs.buf_list, hs.preview_ns)
-      local ok, re = pcall(jump_regex.regex_by_case_searching, pat, false, opts)
-      if ok then
-        local jump_target_gtr = jump_target.jump_target_generator(re, hs.all_ctxs)
-        local generated = jump_target_gtr(opts)
-        hint.set_hint_preview(hs.preview_ns, generated.jump_targets)
-      end
-    elseif opts and #pat == 0 then
-      clear_namespace(hs.buf_list, hs.preview_ns)
-    end
-
-    api.nvim_echo({}, false, {})
-    vim.cmd.redraw()
-    if M.opts.display_prompt then
-      api.nvim_echo({ { prompt, 'Question' }, { pat } }, false, {})
-    end
-
-    local ok, key = pcall(vim.fn.getcharstr)
-    if not ok then -- Interrupted by <C-c>
-      pat = nil
-      break
-    end
-
-    if key == K_Esc then
-      pat = nil
-      break
-    elseif key == K_CR or key == K_NL then
-      break
-    elseif key == K_BS or key == K_C_H then
-      pat_keys[#pat_keys] = nil
-    else
-      pat_keys[#pat_keys + 1] = key
-    end
-
-    if maxchar and #pat_keys >= maxchar then
-      pat = vim.fn.join(pat_keys, '')
-      break
-    end
-  end
-
-  if opts then
-    clear_namespace(hs.buf_list, hs.preview_ns)
-    clear_namespace(hs.buf_list, hs.dim_ns)
-    -- quit only when got nothin for pattern to avoid blink of highlight
-    if not pat then
-      M.quit(hs)
-    end
-  end
-  api.nvim_echo({}, false, {})
-  vim.cmd.redraw()
-  return pat
 end
 
 -- Move the cursor to a given location.
@@ -440,67 +356,6 @@ function M.hint_camel_case(opts)
 end
 
 ---@param opts Options
----@param pattern string|nil
-function M.hint_patterns(opts, pattern)
-  if not M.initialized then
-    vim.notify('Hop is not initialized; please call the setup function', vim.log.levels.ERROR)
-    return
-  end
-
-  local jump_regex = require('hop.jump_regex')
-
-  opts = override_opts(opts)
-
-  -- The pattern to search is either retrieved from the (optional) argument
-  -- or directly from user input.
-  local pat
-  if pattern then
-    pat = pattern
-  else
-    vim.cmd.redraw()
-    vim.fn.inputsave()
-    pat = M.get_input_pattern('Hop pattern: ', nil, opts)
-    vim.fn.inputrestore()
-    if not pat then
-      return
-    end
-  end
-
-  if #pat == 0 then
-    eprintln('-> empty pattern', opts.teasing)
-    return
-  end
-
-  M.hint_with_regex(jump_regex.regex_by_case_searching(pat, false, opts), opts)
-end
-
----@param opts Options
-function M.hint_char1(opts)
-  local jump_regex = require('hop.jump_regex')
-
-  opts = override_opts(opts)
-
-  local c = M.get_input_pattern('Hop 1 char: ', 1)
-  if not c then
-    return
-  end
-  M.hint_with_regex(jump_regex.regex_by_case_searching(c, true, opts), opts)
-end
-
----@param opts Options
-function M.hint_char2(opts)
-  local jump_regex = require('hop.jump_regex')
-
-  opts = override_opts(opts)
-
-  local c = M.get_input_pattern('Hop 2 char: ', 2)
-  if not c then
-    return
-  end
-  M.hint_with_regex(jump_regex.regex_by_case_searching(c, true, opts), opts)
-end
-
----@param opts Options
 function M.hint_lines(opts)
   local jump_regex = require('hop.jump_regex')
 
@@ -543,17 +398,6 @@ function M.setup(opts)
   -- Look up keys in user-defined table with fallback to defaults.
   M.opts = setmetatable(opts or {}, { __index = require('hop.defaults') })
   M.initialized = true
-
-  -- Load dict of match mappings
-  if #M.opts.match_mappings > 0 then
-    M.opts.loaded_mappings = {}
-    for _, map in ipairs(M.opts.match_mappings) do
-      local val = require('hop.mappings.' .. map)
-      if val ~= nil then
-        M.opts.loaded_mappings[map] = val
-      end
-    end
-  end
 
   -- Insert the highlights and register the autocommand if asked to.
   local highlight = require('hop.highlight')

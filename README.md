@@ -40,14 +40,9 @@ target in your document reachable in a few keystrokes.
 
 - Go to any word in the current buffer (`:HopWord`).
 - Go to any camelCase word in the current buffer (`:HopCamelCase`).
-- Go to any character in the current buffer (`:HopChar1`).
-- Go to any bigrams in the current buffer (`:HopChar2`).
-- Make an arbitrary search akin to <kbd>/</kbd> and go to any occurrences (`:HopPattern`).
 - Go to any line and any line start (`:HopLine`, `:HopLineStart`).
 - Go to anywhere (`:HopAnywhere`).
 - Go to treesitter nodes (`:HopNodes`).
-- Paste text in the hinted position without jumping (`:HopPaste`).
-- Yank the text between two hinted position without jumping (`:HopYankChar1`).
 - Use Hop cross windows with multi-windows support (`:Hop*MW`).
 - Use it with commands like `v`, `d`, `c`, `y` to visually select/delete/change/yank up to your new cursor position.
 - Support a wide variety of user configuration options, among the possibility to alter the behavior of commands
@@ -120,17 +115,11 @@ If you want to create a key binding from within Lua:
 -- place this in one of your configuration file(s)
 local hop = require('hop')
 local directions = require('hop.hint').HintDirection
-vim.keymap.set('', 'f', function()
-  hop.hint_char1({ direction = directions.AFTER_CURSOR, current_line_only = true })
+vim.keymap.set('', '<leader>w', function()
+  hop.hint_words({ direction = directions.AFTER_CURSOR })
 end, {remap=true})
-vim.keymap.set('', 'F', function()
-  hop.hint_char1({ direction = directions.BEFORE_CURSOR, current_line_only = true })
-end, {remap=true})
-vim.keymap.set('', 't', function()
-  hop.hint_char1({ direction = directions.AFTER_CURSOR, current_line_only = true, hint_offset = -1 })
-end, {remap=true})
-vim.keymap.set('', 'T', function()
-  hop.hint_char1({ direction = directions.BEFORE_CURSOR, current_line_only = true, hint_offset = 1 })
+vim.keymap.set('', '<leader>W', function()
+  hop.hint_words({ direction = directions.BEFORE_CURSOR })
 end, {remap=true})
 ```
 

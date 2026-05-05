@@ -8,65 +8,12 @@ local M = {}
 
 local hint = require('hop.hint')
 local window = require('hop.window')
-local mappings = require('hop.mappings')
 
 -- JumpRegex modes for the buffer-driven generator.
----@param s string
----@return boolean
-local function starts_with_uppercase(s)
-  if #s == 0 then
-    return false
-  end
-
-  local f = s:sub(1, vim.fn.byteidx(s, 1))
-  -- if it’s a space, we assume it’s not uppercase, even though Lua doesn’t agree with us; I mean, Lua is horrible, who
-  -- would like to argue with that creature, right?
-  if f == ' ' then
-    return false
-  end
-
-  return f:upper() == f
-end
-
--- JumpRegex by searching a pattern.
+-- JumpRegex by searching a static pattern.
 ---@param pat string
----@param plain_search boolean|nil
 ---@return Regex
-local function regex_by_searching(pat, plain_search)
-  if plain_search then
-    pat = vim.fn.escape(pat, '\\/.$^~[]')
-  end
-
-  local regex = vim.regex(pat)
-
-  return {
-    oneshot = false,
-    match = function(s)
-      return regex:match_str(s)
-    end,
-  }
-end
-
--- Wrapper over M.regex_by_searching to add support for case sensitivity.
----@param pat string
----@param plain_search boolean
----@param opts Options
----@return Regex
-function M.regex_by_case_searching(pat, plain_search, opts)
-  local pat_case = ''
-  if opts.case_insensitive and not (vim.o.smartcase and starts_with_uppercase(pat)) then
-    pat_case = '\\c'
-  end
-  local pat_mappings = mappings.checkout(pat, opts)
-
-  if plain_search then
-    pat = vim.fn.escape(pat, '\\/.$^~[]')
-  end
-  if pat_mappings ~= '' then
-    pat = string.format([[\(%s\)\|\(%s\)]], pat, pat_mappings)
-  end
-  pat = pat .. pat_case
-
+local function regex_by_searching(pat)
   local regex = vim.regex(pat)
 
   return {

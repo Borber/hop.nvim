@@ -2,7 +2,6 @@
 
 ---@class Options
 ---@field direction HintDirection
----@field loaded_mappings any
 ---@field visual_mode? VisualMode # should be V for linewise operators (hint_lines), unset otherwise
 local M = {}
 
@@ -17,7 +16,6 @@ M.distance_method = hint.manh_distance
 M.teasing = true
 M.virtual_cursor = false
 M.jump_on_sole_occurrence = true
-M.case_insensitive = true
 M.create_hl_autocmd = true
 M.current_line_only = false
 M.dim_unmatched = true
@@ -32,8 +30,6 @@ M.hint_position = hint.HintPosition.BEGIN ---@type HintPosition
 M.hint_offset = 0 ---@type WindowCell
 M.hint_type = hint.HintType.OVERLAY ---@type HintType
 M.excluded_filetypes = {}
-M.match_mappings = {}
-M.extensions = { 'hop-yank', 'hop-treesitter' }
-M.display_prompt = true
+M.extensions = { 'hop-treesitter' }
 
 return M

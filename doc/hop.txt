@@ -121,40 +121,6 @@ creates a variant of the command that will only run for the current line.
 
     This is akin to calling the |hop.hint_words| Lua function.
 
-`:HopPattern`                                                        *:HopPattern*
-`:HopPatternBC`                                                    *:HopPatternBC*
-`:HopPatternAC`                                                    *:HopPatternAC*
-`:HopPatternCurrentLine`                                  *:HopPatternCurrentLine*
-`:HopPatternCurrentLineBC`                              *:HopPatternCurrentLineBC*
-`:HopPatternCurrentLineAC`                              *:HopPatternCurrentLineAC*
-`:HopPatternMW`                                                    *:HopPatternMW*
-    Ask the user for a pattern and hint the document with it.
-
-    This is akin to calling the |hop.hint_patterns| Lua function
-    with no explicit pattern.
-
-`:HopChar1`                                                            *:HopChar1*
-`:HopChar1BC`                                                        *:HopChar1BC*
-`:HopChar1AC`                                                        *:HopChar1AC*
-`:HopChar1CurrentLine`                                      *:HopChar1CurrentLine*
-`:HopChar1CurrentLineBC`                                  *:HopChar1CurrentLineBC*
-`:HopChar1CurrentLineAC`                                  *:HopChar1CurrentLineAC*
-`:HopChar1MW`                                                        *:HopChar1MW*
-    Type a key and immediately hint the document for this key.
-
-    This is akin to calling the |hop.hint_char1| Lua Function
-
-`:HopChar2`                                                            *:HopChar2*
-`:HopChar2BC`                                                        *:HopChar2BC*
-`:HopChar2AC`                                                        *:HopChar2AC*
-`:HopChar2CurrentLine`                                      *:HopChar2CurrentLine*
-`:HopChar2CurrentLineBC`                                  *:HopChar2CurrentLineBC*
-`:HopChar2CurrentLineAC`                                  *:HopChar2CurrentLineAC*
-`:HopChar2MW`                                                        *:HopChar2MW*
-    Type two keys and immediately hint the document for this bigram.
-
-    This is akin to calling the |hop.hint_char2| Lua Function
-
 `:HopLine`                                                              *:HopLine*
 `:HopLineBC`                                                          *:HopLineBC*
 `:HopLineAC`                                                          *:HopLineAC*
@@ -197,33 +163,6 @@ creates a variant of the command that will only run for the current line.
 
     This is akin to calling the |hop.hint_anywhere| Lua function.
 
-`:HopPasteChar1`                                                  *:HopPasteChar1*
-`:HopPasteChar1BC`                                              *:HopPasteChar1BC*
-`:HopPasteChar1AC`                                              *:HopPasteChar1AC*
-`:HopPasteChar1CurrentLine`                            *:HopPasteChar1CurrentLine*
-`:HopPasteChar1CurrentLineBC`                        *:HopPasteChar1CurrentLineBC*
-`:HopPasteChar1CurrentLineAC`                        *:HopPasteChar1CurrentLineAC*
-
-    Pastes the `defaults.yank_register` register contents by hinting the document
-    like `hop.hop_char1` without jumping to the target.
-
-    You can configure the position of the paste relative to the jump target by
-    using the `hint_offset` option.
-
-    This is akin to calling the |hop-yank.paste_char1| Lua Function
-`:HopYankChar1`                                                     *:HopYankChar1*
-`:HopYankChar1BC`                                                 *:HopYankChar1BC*
-`:HopYankChar1AC`                                                 *:HopYankChar1AC*
-`:HopYankChar1CurrentLine`                               *:HopYankChar1CurrentLine*
-`:HopYankChar1CurrentLineBC`                           *:HopYankChar1CurrentLineBC*
-`:HopYankChar1CurrentLineAC`                           *:HopYankChar1CurrentLineAC*
-
-    Yanks a range to `defaults.yank_register` register by hinting document like
-    `hop.hop_char1` without jumping to bounds.
-    range is (inclusive,inclusive).
-
-    This is akin to calling the |hop-yank.yank_char1| Lua Function
-
 `:HopNodes`                                                             *:HopNodes*
 
     Hint all Treesitter nodes surranding the node on the cursor position.
@@ -248,7 +187,6 @@ unstable.
 `hop.window`      Handle windows context.
 `hop.perm`        Permutation functions. Permutations are used as labels for
                 the hints.
-`hop-yank.yank`   Yank and paste functions
 `hop-treesitter.treesitter`  Parse buffer language tree
 
 Main API~
@@ -328,30 +266,6 @@ Most of the functions and values you need to know about are in `hop`.
     typing key sequences until you reduce a sequence completely, which will
     bring your cursor at that position. See |hop-config| for a complete list
     of the options you can pass as arguments.
-
-    Arguments:~
-        {opts}  Hop options.
-
-`hop.hint_patterns(`{opts}`,` {pattern}`)`                         *hop.hint_patterns*
-    Annotate all matched patterns in the current window with key sequences.
-
-    Arguments:~
-        {opts}     Hop options.
-        {pattern}  (optional) The pattern to search for.
-                   If not set, the user is prompted for the pattern to search.
-
-`hop.hint_char1(`{opts}`)`                                          *hop.hint_char1*
-    Let the user type a key and immediately hint all of its occurrences.
-
-    Arguments:~
-        {opts}  Hop options.
-
-`hop.hint_char2(`{opts}`)`                                          *hop.hint_char2*
-    Let the user type a bigram (two concatenated keys) and immediately hint
-    all of its occurrences.
-
-    This function can behave like |hop.hint_char1| in some cases. See
-    |hop-config-char2_fallback_key|.
 
     Arguments:~
         {opts}  Hop options.
@@ -576,32 +490,14 @@ manipulate the results of jump targets.
                                                             *hop-jump-regex-api*
 Jump regex API~
 
-The jump regex API offers various helper functions to create regexes required by
-|hop.jump_target.jump_target_generator|. This module also provides a function
-called `regex_by_case_searching`, expected to be passed into |hop.hint_with_regex|.
-This function assists you in expanding Hop by enabling the creation of custom
-search patterns for your own jump targets.
+The jump regex API offers various helper functions to create static regexes
+required by |hop.jump_target.jump_target_generator|.
 
 If you want to create your own regex-like table, you need to provide a table
 with two fields: `oneshot`, a boolean value, that is to be set to `true` if the
 regex should be applied only once to each line, and `match`, which is the actual
 matcher that returns the beginning / end (inclusive / exclusive) byte indices
 of the match. You are advised to use |vim.regex|.
-
-`hop.jump_regex.regex_by_case_searching(` *hop.jump_regex.regex_by_case_searching*
-  {pat}`,`
-  {plain_search}`,`
-  {opts}
-`)`
-    Create regex by the given Neovim |search-pattern|, {pat}. If the
-    {plain_search} is true, the {pat} is recongized as plain text instead of
-    regex. This function respects the user case sensitivity set by 'smartcase'
-    and |hop-config-case_insensitive|.
-
-    Arguments:~
-        {pat}          Pattern to search.
-        {plain_search} Should the pattern by plain-text.
-        {opts}         User options.
 
 `hop.jump_regex.regex_by_word_start()`        *hop.jump_regex.regex_by_word_start*
     Create regex for matching |word|. This pattern matches the beginnings of
@@ -853,13 +749,6 @@ below.
     Defaults:~
         `ignore_injections = false`
 
-`case_insensitive`                                   *hop-config-case_insensitive*
-    Use case-insensitive matching by default for commands requiring user
-    input.
-
-    Defaults:~
-        `case_insensitive = true`
-
 `create_hl_autocmd`                                 *hop-config-create_hl_autocmd*
     Create and set highlight autocommands to automatically apply highlights.
     You will want this if you use a theme that clears all highlights before
@@ -940,11 +829,6 @@ below.
     Defaults:~
         `uppercase_labels = false`
 
-`yank_register`                                   *hop-config-yank_register*
-    Determines which one of the `registers` stores the yanked text.
-    Defaults:~
-        `yank_register = ''`
-
 `extensions`                                               *hop-config-extensions*
     List-table of extensions to enable (names). As described in |hop-extension|,
     extensions for which the name in that list must have a `register(opts)`
@@ -981,23 +865,6 @@ below.
 
     Defaults:~
         `excluded_filetypes = { }`
-
-`match_mappings`
-    This option allows you to specify the match mappings to use when applying
-    the hint. If you set a non-empty `match_mappings`, the hint will be used as
-    a key to look up the pattern to search for.
-
-    Currently supported mappings:~
-        'fa' : farsi characters
-        'zh' : Basic characters for Chinese
-        'zh_sc' : Simplified Chinese
-        'zh_tc' : Traditional Chinese
-
-    For example, if `match_mappings` is set to `{'zh', 'zh_sc'}`, the characters
-    in 'zh' and 'zh_sc' can be mixed to match together.
-
-    Defaults:~
-        `match_mappings = { }`
 
 ==============================================================================
 EXTENSION                                                        *hop-extension*
@@ -1054,7 +921,7 @@ highlight is used. For the rest:
     Lua functions.
 
 `HopPreview`                                                   *hop-hl-HopPreview*
-    Highlight used for to preview the hint for HopPattern.
+    Highlight used for hint previews.
 
 Highlights are inserted in an augroup, `HopInitHighlight`, and an autocommand
 is automatically set when initializing the plugin, unless you set
